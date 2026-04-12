@@ -1,0 +1,20 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e3a5f" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <circle cx="1020" cy="120" r="120" fill="#ff6b35" opacity="0.22" />
+  <circle cx="170" cy="520" r="160" fill="#ff6b35" opacity="0.18" />
+  <text x="96" y="248" fill="#ffffff" font-size="72" font-family="Segoe UI, Arial, sans-serif" font-weight="700">
+    FastHousing
+  </text>
+  <text x="96" y="336" fill="#e2e8f0" font-size="42" font-family="Segoe UI, Arial, sans-serif">
+    p?)Q³V	•
+  </text>
+  <text x="96" y="412" fill="#cbd5e1" font-size="30" font-family="Segoe UI, Arial, sans-serif">
+    ?ùÔ · ¤U · -?ı›Ä0
+  </text>
+</svg>
