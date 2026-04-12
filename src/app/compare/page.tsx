@@ -15,6 +15,8 @@ import { DEFAULT_DIMENSIONS, STORAGE_KEYS } from "@/lib/constants";
 import { getExportErrorMessage } from "@/lib/export";
 import { HouseItem, ScoreDimension } from "@/lib/types";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { StarRating } from "@/components/compare/star-rating";
+import { CommunitySummary, ListingItem, getListings, searchCommunities } from "@/lib/api";
 
 type TemplateId = "school" | "commute" | "value" | "family";
 
@@ -124,6 +126,12 @@ function getRangeScore(value: number, values: number[], reverse = false) {
   return Math.max(1, Math.min(5, score));
 }
 
+function getScoreCellClass(score: number) {
+  if (score >= 4) return "text-emerald-700 font-medium";
+  if (score <= 2) return "text-rose-600 font-medium";
+  return "text-slate-500";
+}
+
 export default function ComparePage() {
   const [houses, setHouses] = useLocalStorage<HouseItem[]>(STORAGE_KEYS.houses, []);
   const [dimensions, setDimensions] = useLocalStorage<ScoreDimension[]>(
@@ -137,6 +145,13 @@ export default function ComparePage() {
   const [isWeightOpen, setIsWeightOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+  const [isDbPanelOpen, setIsDbPanelOpen] = useState(false);
+  const [dbKeyword, setDbKeyword] = useState("");
+  const [dbLoading, setDbLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [dbCommunities, setDbCommunities] = useState<CommunitySummary[]>([]);
+  const [dbSelectedCommunity, setDbSelectedCommunity] = useState<CommunitySummary | null>(null);
+  const [dbListings, setDbListings] = useState<ListingItem[]>([]);
   const resultRef = useRef<HTMLDivElement | null>(null);
 
   const houseScores = useMemo(() => {
@@ -290,6 +305,89 @@ export default function ComparePage() {
     );
   }
 
+  async function handleSearchCommunities() {
+    const keyword = dbKeyword.trim();
+    if (!keyword) return;
+
+    setDbLoading(true);
+    setDbError(null);
+    setDbSelectedCommunity(null);
+    setDbListings([]);
+
+    try {
+      const list = await searchCommunities(keyword);
+      setDbCommunities(list);
+      if (list.length === 0) {
+        setDbError("没有匹配小区，请换关键词。");
+      }
+    } catch {
+      setDbError("后端暂不可用，请先启动后端服务。");
+      setDbCommunities([]);
+    } finally {
+      setDbLoading(false);
+    }
+  }
+
+  async function chooseCommunity(community: CommunitySummary) {
+    setDbSelectedCommunity(community);
+    setDbLoading(true);
+    setDbError(null);
+    try {
+      const data = await getListings({ community_id: community.id, status: "active", size: 20, page: 1 });
+      setDbListings(data.items ?? []);
+      if (!data.items?.length) {
+        setDbError("该小区暂无可导入在售房源。");
+      }
+    } catch {
+      setDbError("房源列表获取失败，请稍后再试。");
+      setDbListings([]);
+    } finally {
+      setDbLoading(false);
+    }
+  }
+
+  function importListing(listing: ListingItem) {
+    if (houses.length >= HOUSE_LIMIT) {
+      setDbError(`最多仅支持 ${HOUSE_LIMIT} 套房源对比。`);
+      return;
+    }
+
+    const totalPrice = Number(listing.total_price ?? 0);
+    const area = Number(listing.area ?? 0);
+    const unitPrice = Number(listing.unit_price ?? 0);
+
+    if (totalPrice <= 0 || area <= 0) {
+      setDbError("该房源缺少关键价格或面积字段，无法导入。");
+      return;
+    }
+
+    const imported: HouseItem = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name: listing.title || `${dbSelectedCommunity?.name ?? "小区房源"}（数据库）`,
+      totalPrice,
+      area,
+      unitPrice: unitPrice > 0 ? unitPrice : (totalPrice * 10000) / area,
+      layout: listing.layout || "未填写",
+      floor: listing.floor_info || "未填写",
+      floorScore: 3,
+      orientation: listing.orientation || "未填写",
+      orientationScore: 3,
+      buildYear: listing.build_year,
+      decoration: listing.decoration || "未填写",
+      transportScore: 3,
+      school: "未填写",
+      schoolScore: 3,
+      communityScore: 3,
+      decorationScore: 3,
+      notes: "来源：后端数据库导入",
+      createdAt: Date.now(),
+    };
+
+    setHouses((prev) => [...prev, imported]);
+    setDbError("导入成功，可在表单中继续完善评分和备注。");
+    setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  }
+
   async function handleExportImage() {
     if (!resultRef.current) return;
     setIsExporting(true);
@@ -335,6 +433,13 @@ export default function ComparePage() {
           ) : null}
           <button
             type="button"
+            onClick={() => setIsDbPanelOpen((prev) => !prev)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 transition hover:bg-slate-50"
+          >
+            从数据库搜索
+          </button>
+          <button
+            type="button"
             onClick={openAddForm}
             disabled={houses.length >= HOUSE_LIMIT}
             className="rounded-md bg-[var(--brand-primary)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-300"
@@ -351,6 +456,85 @@ export default function ComparePage() {
         >
           {exportFeedback}
         </p>
+      ) : null}
+      {isDbPanelOpen ? (
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-base font-semibold text-slate-900">从数据库导入房源</h2>
+          <div className="flex gap-2">
+            <input
+              value={dbKeyword}
+              onChange={(e) => setDbKeyword(e.target.value)}
+              placeholder="输入小区名（如：中远两湾城）"
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={handleSearchCommunities}
+              disabled={dbLoading}
+              className="rounded-md border border-slate-300 px-3 py-2 text-xs text-slate-700 disabled:opacity-60"
+            >
+              {dbLoading ? "搜索中..." : "搜索小区"}
+            </button>
+          </div>
+          {dbError ? (
+            <p className={`text-xs ${dbError.includes("成功") ? "text-emerald-600" : "text-rose-600"}`}>
+              {dbError}
+            </p>
+          ) : null}
+
+          {dbCommunities.length > 0 ? (
+            <div className="grid gap-2 md:grid-cols-2">
+              {dbCommunities.map((community) => (
+                <button
+                  key={community.id}
+                  type="button"
+                  onClick={() => chooseCommunity(community)}
+                  className={`rounded-lg border p-3 text-left ${
+                    dbSelectedCommunity?.id === community.id
+                      ? "border-[var(--brand-primary)] bg-blue-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-slate-900">{community.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">{community.district ?? "未知区域"}</p>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {dbSelectedCommunity ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-800">在售房源（{dbSelectedCommunity.name}）</p>
+              {dbListings.length === 0 ? (
+                <p className="text-xs text-slate-500">暂无可导入房源</p>
+              ) : (
+                <div className="space-y-2">
+                  {dbListings.map((listing) => (
+                    <article
+                      key={listing.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
+                    >
+                      <div>
+                        <p className="text-sm text-slate-900">{listing.title || "未命名房源"}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          总价 {Number(listing.total_price ?? 0).toFixed(1)} 万 · 面积{" "}
+                          {Number(listing.area ?? 0).toFixed(1)} ㎡
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => importListing(listing)}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        导入
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {isFormOpen ? (
@@ -451,30 +635,37 @@ export default function ComparePage() {
             />
           </div>
 
-          <div className="grid gap-3 rounded-lg bg-slate-50 p-3 md:grid-cols-3">
-            {[
-              { key: "floorScore", label: "楼层评分" },
-              { key: "orientationScore", label: "朝向评分" },
-              { key: "transportScore", label: "交通评分" },
-              { key: "schoolScore", label: "学区评分" },
-              { key: "communityScore", label: "小区评分" },
-              { key: "decorationScore", label: "装修评分" },
-            ].map((item) => (
-              <label key={item.key} className="text-xs text-slate-600">
-                {item.label}（1-5）
-                <input
-                  type="number"
-                  min={1}
-                  max={5}
-                  step={1}
-                  value={formState[item.key as keyof HouseFormState]}
-                  onChange={(e) =>
-                    setFormState((prev) => ({ ...prev, [item.key]: e.target.value } as HouseFormState))
-                  }
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-              </label>
-            ))}
+          <div className="grid gap-3 rounded-lg bg-slate-50 p-3 md:grid-cols-2">
+            <StarRating
+              label="楼层评分"
+              value={clampScore(Number(formState.floorScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, floorScore: String(value) }))}
+            />
+            <StarRating
+              label="朝向评分"
+              value={clampScore(Number(formState.orientationScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, orientationScore: String(value) }))}
+            />
+            <StarRating
+              label="交通评分"
+              value={clampScore(Number(formState.transportScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, transportScore: String(value) }))}
+            />
+            <StarRating
+              label="学区评分"
+              value={clampScore(Number(formState.schoolScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, schoolScore: String(value) }))}
+            />
+            <StarRating
+              label="小区评分"
+              value={clampScore(Number(formState.communityScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, communityScore: String(value) }))}
+            />
+            <StarRating
+              label="装修评分"
+              value={clampScore(Number(formState.decorationScore))}
+              onChange={(value) => setFormState((prev) => ({ ...prev, decorationScore: String(value) }))}
+            />
           </div>
 
           <textarea
@@ -536,7 +727,8 @@ export default function ComparePage() {
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  总价 {house.totalPrice} 万 | 面积 {house.area} ㎡ | 单价 {(house.unitPrice / 10000).toFixed(2)} 万/㎡
+                  总价 {house.totalPrice.toFixed(1)} 万 | 面积 {house.area.toFixed(1)} ㎡ | 单价{" "}
+                  {(house.unitPrice / 10000).toFixed(2)} 万/㎡
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   {house.layout} · {house.floor} · {house.orientation}
@@ -733,11 +925,46 @@ export default function ComparePage() {
                     { label: "楼层", getValue: (house: HouseItem) => house.floor },
                     { label: "朝向", getValue: (house: HouseItem) => house.orientation },
                     { label: "学区", getValue: (house: HouseItem) => house.school },
+                    {
+                      label: "楼层评分",
+                      getValue: (house: HouseItem) => house.floorScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.floorScore,
+                    },
+                    {
+                      label: "朝向评分",
+                      getValue: (house: HouseItem) => house.orientationScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.orientationScore,
+                    },
+                    {
+                      label: "交通评分",
+                      getValue: (house: HouseItem) => house.transportScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.transportScore,
+                    },
+                    {
+                      label: "学区评分",
+                      getValue: (house: HouseItem) => house.schoolScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.schoolScore,
+                    },
+                    {
+                      label: "小区品质",
+                      getValue: (house: HouseItem) => house.communityScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.communityScore,
+                    },
+                    {
+                      label: "装修评分",
+                      getValue: (house: HouseItem) => house.decorationScore.toFixed(1),
+                      scoreValue: (house: HouseItem) => house.decorationScore,
+                    },
                   ].map((row) => (
                     <tr key={row.label} className="border-t border-slate-100">
                       <td className="px-3 py-2 text-xs text-slate-500">{row.label}</td>
                       {houses.map((house) => (
-                        <td key={`${row.label}-${house.id}`} className="px-3 py-2 text-slate-700">
+                        <td
+                          key={`${row.label}-${house.id}`}
+                          className={`px-3 py-2 text-slate-700 ${
+                            row.scoreValue ? getScoreCellClass(row.scoreValue(house)) : ""
+                          }`}
+                        >
                           {row.getValue(house)}
                         </td>
                       ))}

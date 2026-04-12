@@ -1,0 +1,1 @@
+"""FastHousing backend application package."""

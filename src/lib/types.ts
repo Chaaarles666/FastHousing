@@ -38,10 +38,14 @@ export interface FinancialProfile {
   savings: number;
   providentBalance: number;
   providentMonthly: number;
+  investmentReturn: number;
   existingMortgage: number;
   carLoan: number;
   otherDebt: number;
+  targetPrice: number;
   isFirstHome: boolean;
+  isFullFiveUnique: boolean;
+  isOverTwoYears: boolean;
   familySize: number;
   targetArea: number;
   loanYears: number;

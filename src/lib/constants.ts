@@ -34,6 +34,9 @@ export const SHANGHAI_CONFIG = {
     incomeTax: 0.01,
     agencyFee: 0.015,
   },
+  defaults: {
+    investmentReturn: 3,
+  },
   lastUpdated: "2025-04-01",
 } as const;
 

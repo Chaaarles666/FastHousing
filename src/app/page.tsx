@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Calculator, CheckSquare, Radar } from "lucide-react";
+import { Calculator, CheckSquare, LineChart, Radar } from "lucide-react";
 
 const features = [
   {
@@ -20,6 +20,12 @@ const features = [
     description: "结合家庭收支与上海政策，快速评估可承受总价与月供压力。",
     href: "/calculator",
     icon: Calculator,
+  },
+  {
+    title: "价格透视镜",
+    description: "按小区查看近12个月价格走势、成交活跃度和挂牌-成交关系。",
+    href: "/price",
+    icon: LineChart,
   },
 ];
 
@@ -68,7 +74,7 @@ export default function Home() {
         </p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {features.map((feature) => {
           const Icon = feature.icon;
 

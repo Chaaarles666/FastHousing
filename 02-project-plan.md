@@ -57,9 +57,11 @@
 | `01-market-research.md` | 市场调研报告 | ✅ 完成 |
 | `02-project-plan.md` | 项目总体规划（本文档） | ✅ 完成 |
 | `03-prd-mvp.md` | MVP 产品需求文档 | ✅ 完成 |
-| `04-tech-architecture.md` | 技术架构文档 | 待编写 |
-| `05-data-strategy.md` | 数据获取策略 | 待编写 |
-| `cursor-prompts.md` | 给 Cursor 的结构化开发 Prompt | ✅ 完成 |
+| `04-backend-architecture.md` | 后端架构 & 数据库设计 | ✅ 完成 |
+| `05-crawler-strategy.md` | 爬虫策略 & 数据获取 | ✅ 完成 |
+| `prompts/cursor-prompts.md` | MVP 前端开发 Prompt | ✅ 完成 |
+| `prompts/cursor-improvements.md` | MVP 改进项 Prompt | ✅ 完成 |
+| `prompts/cursor-backend.md` | 后端+爬虫+对接 Prompt | ✅ 完成 |
 
 ---
 

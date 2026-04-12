@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calculator, CheckSquare, Home, Radar } from "lucide-react";
+import { Calculator, CheckSquare, Home, LineChart, Radar } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
   { href: "/compare", label: "对比", icon: Radar },
   { href: "/checklist", label: "清单", icon: CheckSquare },
   { href: "/calculator", label: "评估", icon: Calculator },
+  { href: "/price", label: "透视", icon: LineChart },
 ];
 
 export function MobileNav() {
@@ -16,7 +17,7 @@ export function MobileNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
-      <ul className="mx-auto grid h-16 w-full max-w-md grid-cols-4 px-2">
+      <ul className="mx-auto grid h-16 w-full max-w-md grid-cols-5 px-2">
         {navItems.map((item) => {
           const isActive =
             item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
