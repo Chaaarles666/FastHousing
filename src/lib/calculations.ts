@@ -70,16 +70,18 @@ export function calcMaxPurchasePower(profile: FinancialProfile) {
   const totalIncome = profile.monthlyIncome + profile.spouseIncome + profile.otherIncome;
   const totalDebt = profile.existingMortgage + profile.carLoan + profile.otherDebt;
   const spendable = Math.max(0, totalIncome - profile.monthlyExpense - totalDebt);
-  const paymentCap = spendable * 0.4;
+  const paymentCap = spendable * 0.5;
 
   const loanByPayment = inverseLoanFromPayment(paymentCap, loanRate, profile.loanYears);
-  const totalByPayment = (loanByPayment / 10000) / (1 - downPaymentRate);
-
   const emergencyReserve = (profile.monthlyExpense * 6) / 10000;
-  const availableForDown = Math.max(0, profile.savings + profile.providentBalance - emergencyReserve);
-  const totalByDownPayment = availableForDown / (downPaymentRate + 0.05);
+  const availableCash = Math.max(0, profile.savings + profile.providentBalance - emergencyReserve);
 
-  return Math.max(0, Math.min(totalByPayment, totalByDownPayment));
+  const totalByLoan = availableCash / (downPaymentRate + 0.05) + loanByPayment / 10000;
+  const maxByDownPayment = availableCash / downPaymentRate;
+  const totalByLoanCapped = Math.min(totalByLoan, maxByDownPayment);
+  const totalByCash = availableCash;
+
+  return Math.max(0, Math.max(totalByLoanCapped, totalByCash));
 }
 
 export function calcMonthlyInvestmentIncome(remainingSavingsWan: number, annualReturnPercent: number) {

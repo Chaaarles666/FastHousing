@@ -63,11 +63,15 @@ const DEFAULT_PROFILE: FinancialProfile = {
 };
 
 function formatWan(value: number) {
-  return `${Math.max(0, value).toFixed(1)} 万`;
+  if (value < 0) return `-${Math.abs(value).toFixed(1)} 万`;
+  return `${value.toFixed(1)} 万`;
 }
 
 function formatMoney(value: number) {
-  return `¥${Math.round(Math.max(0, value)).toLocaleString("zh-CN")}`;
+  const abs = Math.abs(Math.round(value));
+  const formatted = abs.toLocaleString("zh-CN");
+  if (value < 0) return `-¥${formatted}`;
+  return `¥${formatted}`;
 }
 
 function getRiskLevel(value: number, good: number, warn: number): RiskLevel {
@@ -229,6 +233,7 @@ export default function CalculatorPage() {
       downPaymentRate,
       commercialRate,
       taxes,
+      totalIncome,
       availableCash,
       minDownPayment,
       minCashNeeded,
@@ -316,11 +321,16 @@ export default function CalculatorPage() {
 
       <section className="rounded-2xl p-6 text-white shadow-lg" style={{ background: feasibilityBg(calc.canAfford, calc.cashGap, profile.targetPrice) }}>
         <p className="text-lg font-bold">{calc.canAfford ? "🟢 这套房你买得起" : `🔴 还差 ${formatWan(calc.cashGap)}`}</p>
-        <p className="mt-1 text-sm opacity-90">目标总价 {formatWan(profile.targetPrice)} · 购买力上限约 {formatWan(calc.maxPurchasePower)}</p>
+        <p className="mt-1 text-sm opacity-90">目标总价 {formatWan(profile.targetPrice)}</p>
+        <p className="text-xs opacity-75">
+          按你的收入和存款，最高可承受约 {formatWan(calc.maxPurchasePower)} 的房产
+          {profile.targetPrice <= calc.maxPurchasePower ? "，目标在范围内 ✅" : "，目标已超出 ⚠️"}
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="rounded-full bg-white/20 px-2 py-1 text-xs">最低首付 {formatWan(calc.minDownPayment)}</span>
           <span className="rounded-full bg-white/20 px-2 py-1 text-xs">需准备现金 {formatWan(calc.minCashNeeded)}</span>
           <span className="rounded-full bg-white/20 px-2 py-1 text-xs">推荐月供 {formatMoney(calc.recommended.monthlyPayment)}</span>
+          <span className="rounded-full bg-white/20 px-2 py-1 text-xs">推荐策略 {calc.recommended.name}</span>
         </div>
         {!calc.canAfford ? (
           <div className="mt-3 rounded-lg bg-white/15 p-3 text-sm">
@@ -343,11 +353,45 @@ export default function CalculatorPage() {
             <label className="text-xs text-slate-600">现有房贷月供（元）<input type="number" value={profile.existingMortgage} onChange={(e) => setNumber("existingMortgage", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs text-slate-600">车贷月供（元）<input type="number" value={profile.carLoan} onChange={(e) => setNumber("carLoan", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs text-slate-600">其他负债（元）<input type="number" value={profile.otherDebt} onChange={(e) => setNumber("otherDebt", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
-            <label className="text-xs text-slate-600">年化收益率：{profile.investmentReturn}%<input type="range" min={0} max={8} step={0.5} value={profile.investmentReturn} onChange={(e) => setNumber("investmentReturn", e.target.value)} className="mt-2 w-full" /></label>
+            <label className="text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <span>年化收益率</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={8}
+                    step={0.1}
+                    value={profile.investmentReturn}
+                    onChange={(e) => setNumber("investmentReturn", e.target.value)}
+                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                  />
+                  <span className="text-sm">%</span>
+                </div>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={8}
+                step={0.5}
+                value={profile.investmentReturn}
+                onChange={(e) => setNumber("investmentReturn", e.target.value)}
+                className="mt-2 w-full"
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+                <span>0% 活期</span>
+                <span>3% 理财</span>
+                <span>5% 基金</span>
+                <span>8% 股市</span>
+              </div>
+            </label>
           </div>
         </div>
-        <div className="rounded-xl border-2 border-dashed border-[var(--brand-accent)] bg-orange-50/50 p-4">
-          <h2 className="text-base font-semibold text-slate-900">🏠 目标房产</h2>
+        <div className="rounded-xl border-2 border-[var(--brand-accent)] bg-gradient-to-br from-orange-50 via-amber-50 to-white p-4 shadow-[0_10px_30px_rgba(255,107,53,0.15)]">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-base font-semibold text-slate-900">🏠 目标房产</h2>
+            <span className="rounded-full bg-[var(--brand-accent)] px-2 py-0.5 text-[10px] font-medium text-white">重点输入</span>
+          </div>
           <div className="mt-3 grid gap-3">
             <label className="text-sm font-medium text-slate-700">目标总价（万元）<input type="number" value={profile.targetPrice} onChange={(e) => setNumber("targetPrice", e.target.value)} className="mt-1 w-full rounded-lg border-2 border-[var(--brand-accent)] px-4 py-3 text-2xl font-bold text-slate-900" /></label>
             <label className="text-xs text-slate-600">目标面积（㎡）<input type="number" value={profile.targetArea} onChange={(e) => setNumber("targetArea", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
@@ -356,26 +400,47 @@ export default function CalculatorPage() {
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={profile.isFullFiveUnique} onChange={(e) => setProfile((prev) => ({ ...prev, isFullFiveUnique: e.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]" />满五唯一（免个税）</label>
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={profile.isOverTwoYears} onChange={(e) => setProfile((prev) => ({ ...prev, isOverTwoYears: e.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]" />满两年（免增值税）</label>
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg bg-white/80 p-2">
+              <p className="text-slate-500">预计税费</p>
+              <p className="mt-1 font-semibold text-slate-900">{formatWan(calc.taxes.total)}</p>
+            </div>
+            <div className="rounded-lg bg-white/80 p-2">
+              <p className="text-slate-500">最低首付</p>
+              <p className="mt-1 font-semibold text-slate-900">{formatWan(calc.minDownPayment)}</p>
+            </div>
+          </div>
         </div>
       </section>
 
       {calc.canAfford ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">付款策略对比</h2>
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
+            <p className="text-xs text-orange-700">当前推荐</p>
+            <p className="mt-1 text-base font-semibold text-slate-900">{calc.recommended.name}</p>
+            <p className="mt-1 text-sm text-slate-700">{calc.recommended.reason}</p>
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-slate-900">付款策略对比</h2>
           <p className="mt-1 text-xs text-slate-500">
             投资收益率 {profile.investmentReturn}% vs 商贷利率 {(calc.commercialRate * 100).toFixed(2)}%
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {calc.strategies.map((s) => (
-              <article key={s.name} className={`rounded-xl border-2 p-4 ${s.recommended ? "border-[var(--brand-accent)] bg-orange-50" : "border-slate-200 bg-white"}`}>
-                {s.recommended ? <span className="rounded-full bg-[var(--brand-accent)] px-2 py-0.5 text-xs text-white">⭐ 推荐</span> : null}
+              <article
+                key={s.name}
+                className={`rounded-xl border-2 p-4 transition ${
+                  s.recommended
+                    ? "border-[var(--brand-accent)] bg-gradient-to-b from-orange-50 to-white shadow-[0_10px_24px_rgba(255,107,53,0.2)]"
+                    : "border-slate-200 bg-white"
+                }`}
+              >
+                {s.recommended ? <span className="rounded-full bg-[var(--brand-accent)] px-2 py-0.5 text-xs text-white">⭐ 推荐策略</span> : null}
                 <h3 className="mt-2 text-sm font-semibold">{s.name}</h3>
                 <p className="mt-1 text-xs text-slate-500">首付 {formatWan(s.downPayment)} · 贷款 {formatWan(s.loanAmount)}</p>
                 <p className="mt-1 text-xs text-slate-500">公积金 {formatWan(s.providentLoan)} · 商贷 {formatWan(s.commercialLoan)}</p>
-                <p className="mt-1 text-xs text-slate-500">月供 {formatMoney(s.monthlyPayment)} · 月投资收益 +{formatMoney(s.investmentIncome)}</p>
-                <p className="mt-1 text-xs text-slate-500">净月支出 {s.netMonthlyCost <= 0 ? `净赚 ${formatMoney(Math.abs(s.netMonthlyCost))}` : formatMoney(s.netMonthlyCost)}</p>
-                <p className="mt-1 text-xs text-slate-500">总利息 {formatWan(s.totalInterest)} · 30年总成本 {formatWan(s.totalCost)}</p>
-                {s.recommended ? <p className="mt-2 text-xs text-orange-700">{s.reason}</p> : null}
+                <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-700">月供 {formatMoney(s.monthlyPayment)} · 月投资收益 +{formatMoney(s.investmentIncome)}</p>
+                <p className={`mt-1 text-xs ${s.netMonthlyCost <= 0 ? "text-emerald-700" : "text-slate-500"}`}>净月支出 {s.netMonthlyCost <= 0 ? `净赚 ${formatMoney(Math.abs(s.netMonthlyCost))}` : formatMoney(s.netMonthlyCost)}</p>
+                <p className="mt-1 text-xs text-slate-500">30年总利息 {formatWan(s.totalInterest)}</p>
               </article>
             ))}
           </div>
@@ -402,8 +467,10 @@ export default function CalculatorPage() {
 
       <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2 lg:grid-cols-4">
         {quickCards.map((card) => (
-          <div key={card.label} className={`rounded-lg p-3 text-sm ${riskClass(card.level)}`}>
-            <p>{card.label}</p><p className="mt-1 text-base font-semibold">{card.value}</p><p className="mt-1 text-xs opacity-80">{card.desc}</p>
+          <div key={card.label} className={`rounded-lg border p-3 text-sm ${riskClass(card.level)}`}>
+            <p className="text-xs opacity-80">{card.label}</p>
+            <p className="mt-1 text-lg font-semibold">{card.value}</p>
+            <p className="mt-1 text-xs opacity-80">{card.desc}</p>
           </div>
         ))}
       </section>
@@ -411,9 +478,51 @@ export default function CalculatorPage() {
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <h3 className="text-sm font-semibold text-slate-900">场景模拟器</h3>
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg bg-slate-50 p-3 text-sm"><p>利率变动（±1%）</p><input type="range" min={-1} max={1} step={0.1} value={rateShift} onChange={(e) => setRateShift(Number(e.target.value))} className="mt-2 w-full" /><p className="mt-1 text-xs text-slate-600">月供：{formatMoney(calc.shiftedMonthly)}</p></div>
+          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <p className="font-medium text-slate-700">利率变动模拟</p>
+            <input type="range" min={-1} max={1} step={0.1} value={rateShift} onChange={(e) => setRateShift(Number(e.target.value))} className="mt-2 w-full" />
+            <div className="mt-2 space-y-1 text-xs text-slate-600">
+              <p>
+                调整幅度：
+                <span className={rateShift > 0 ? "font-medium text-rose-600" : rateShift < 0 ? "font-medium text-emerald-600" : ""}>
+                  {rateShift > 0 ? "+" : ""}
+                  {rateShift.toFixed(1)}%
+                </span>
+              </p>
+              <p>商贷利率：{(calc.commercialRate * 100).toFixed(2)}% → {((calc.commercialRate + rateShift / 100) * 100).toFixed(2)}%</p>
+              <p>
+                月供变化：{formatMoney(calc.recommended.monthlyPayment)} → {formatMoney(calc.shiftedMonthly)}
+                <span className={calc.shiftedMonthly > calc.recommended.monthlyPayment ? " text-rose-600" : " text-emerald-600"}>
+                  （{calc.shiftedMonthly > calc.recommended.monthlyPayment ? "+" : ""}
+                  {formatMoney(calc.shiftedMonthly - calc.recommended.monthlyPayment)}/月）
+                </span>
+              </p>
+            </div>
+          </div>
           <div className="rounded-lg bg-slate-50 p-3 text-sm"><p>提前还贷模拟</p><input type="number" value={prepayAmount} onChange={(e) => setPrepayAmount(Number(e.target.value) || 0)} className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1 text-sm" /><p className="mt-1 text-xs text-slate-600">预计省息：{formatMoney(calc.prepaySaveEstimate)}</p></div>
-          <div className="rounded-lg bg-slate-50 p-3 text-sm"><p>收入下降压力测试</p><select value={incomeDrop} onChange={(e) => setIncomeDrop(Number(e.target.value))} className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"><option value={20}>下降20%</option><option value={30}>下降30%</option><option value={40}>下降40%</option></select><p className="mt-1 text-xs text-slate-600">下降后月结余：{formatMoney(calc.droppedDisposable)}</p></div>
+          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <p className="font-medium text-slate-700">收入下降压力测试</p>
+            <select value={incomeDrop} onChange={(e) => setIncomeDrop(Number(e.target.value))} className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1 text-sm">
+              <option value={10}>下降 10%</option>
+              <option value={20}>下降 20%</option>
+              <option value={30}>下降 30%</option>
+              <option value={40}>下降 40%</option>
+              <option value={50}>下降 50%</option>
+            </select>
+            <div className="mt-2 space-y-1 text-xs text-slate-600">
+              <p>下降后月收入：{formatMoney(calc.totalIncome * (1 - incomeDrop / 100))}</p>
+              <p className={calc.droppedDisposable < 0 ? "font-medium text-rose-600" : "text-emerald-600"}>
+                下降后月结余：{formatMoney(calc.droppedDisposable)}
+                {calc.droppedDisposable < 0 ? " ❌ 入不敷出！" : ""}
+              </p>
+              {calc.droppedDisposable < 0 && calc.recommended.remainingSavings > 0 ? (
+                <p className="text-rose-600">
+                  每月缺口 {formatMoney(Math.abs(calc.droppedDisposable))}，剩余存款可支撑约{" "}
+                  {Math.floor((calc.recommended.remainingSavings * 10000) / Math.abs(calc.droppedDisposable))} 个月
+                </p>
+              ) : null}
+            </div>
+          </div>
           <div className="rounded-lg bg-slate-50 p-3 text-sm"><p>等额本息 vs 等额本金</p><p className="mt-1 text-xs text-slate-600">本息月供：{formatMoney(calc.recommended.monthlyPayment)}</p><p className="mt-1 text-xs text-slate-600">本金首月：{formatMoney(calc.principalFirst)}</p></div>
         </div>
       </section>
