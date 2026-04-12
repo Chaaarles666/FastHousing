@@ -87,3 +87,88 @@ export function calcMaxPurchasePower(profile: FinancialProfile) {
 export function calcMonthlyInvestmentIncome(remainingSavingsWan: number, annualReturnPercent: number) {
   return (remainingSavingsWan * 10000 * (annualReturnPercent / 100)) / 12;
 }
+
+export interface YearlyAssetRow {
+  year: number;
+  houseValue: number;
+  remainingLoan: number;
+  houseEquity: number;
+  investmentAssets: number;
+  totalNetWorth: number;
+  cumulativePayment: number;
+}
+
+export function calcYearlyAssets(params: {
+  housePrice: number;
+  loanAmount: number;
+  monthlyPayment: number;
+  remainingSavings: number;
+  investmentReturn: number;
+  houseAppreciation: number;
+  monthlySurplus: number;
+  loanYears: number;
+  repaymentMethod: "equal-installment" | "equal-principal";
+  annualLoanRate: number;
+}): YearlyAssetRow[] {
+  const rows: YearlyAssetRow[] = [];
+  const {
+    housePrice,
+    loanAmount,
+    monthlyPayment,
+    remainingSavings,
+    investmentReturn,
+    houseAppreciation,
+    monthlySurplus,
+    loanYears,
+    repaymentMethod,
+    annualLoanRate,
+  } = params;
+
+  const monthlyRate = annualLoanRate / 12;
+  const totalMonths = loanYears * 12;
+  let currentLoan = Math.max(0, loanAmount);
+  let currentInvestment = Math.max(0, remainingSavings);
+  let cumulativePayment = 0;
+
+  const showYears = [1, 2, 3, 5, 10, 15, 20, 25, 30].filter((year) => year <= loanYears);
+
+  for (let year = 1; year <= loanYears; year++) {
+    for (let month = 0; month < 12; month++) {
+      const monthIndex = (year - 1) * 12 + month;
+      if (monthIndex >= totalMonths || currentLoan <= 0) break;
+
+      if (repaymentMethod === "equal-installment") {
+        const interest = currentLoan * 10000 * monthlyRate;
+        const principal = Math.max(0, monthlyPayment - interest);
+        const principalWan = Math.min(currentLoan, principal / 10000);
+        currentLoan = Math.max(0, currentLoan - principalWan);
+        cumulativePayment += monthlyPayment / 10000;
+      } else {
+        const monthlyPrincipal = (loanAmount * 10000) / totalMonths;
+        const principalWan = Math.min(currentLoan, monthlyPrincipal / 10000);
+        const interest = currentLoan * 10000 * monthlyRate;
+        currentLoan = Math.max(0, currentLoan - principalWan);
+        cumulativePayment += (principalWan * 10000 + interest) / 10000;
+      }
+    }
+
+    const yearlyNewSaving = Math.max(0, ((monthlySurplus * 12) / 10000) * 0.5);
+    currentInvestment = currentInvestment * (1 + investmentReturn / 100) + yearlyNewSaving;
+
+    if (showYears.includes(year)) {
+      const houseValue = housePrice * Math.pow(1 + houseAppreciation / 100, year);
+      const houseEquity = houseValue - currentLoan;
+      rows.push({
+        year,
+        houseValue,
+        remainingLoan: currentLoan,
+        houseEquity,
+        investmentAssets: currentInvestment,
+        totalNetWorth: houseEquity + currentInvestment,
+        cumulativePayment,
+      });
+    }
+  }
+
+  return rows;
+}

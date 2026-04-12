@@ -49,6 +49,8 @@ export interface FinancialProfile {
   familySize: number;
   targetArea: number;
   loanYears: number;
+  repaymentMethod: "equal-installment" | "equal-principal";
+  houseAppreciation: number;
 }
 
 export interface ChecklistItem {

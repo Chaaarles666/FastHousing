@@ -6,6 +6,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import {
+  calcYearlyAssets,
   calcEqualInstallmentMonthlyPayment,
   calcEqualPrincipalFirstMonthPayment,
   calcMaxPurchasePower,
@@ -60,6 +61,8 @@ const DEFAULT_PROFILE: FinancialProfile = {
   isOverTwoYears: true,
   loanYears: 30,
   familySize: 2,
+  repaymentMethod: "equal-installment",
+  houseAppreciation: 2,
 };
 
 function formatWan(value: number) {
@@ -147,6 +150,7 @@ export default function CalculatorPage() {
     const aggressive = calcRange(0.5);
 
     const months = debouncedProfile.loanYears * 12;
+    const repaymentMethod = debouncedProfile.repaymentMethod ?? "equal-installment";
     const providentCap = debouncedProfile.familySize > 1 ? SHANGHAI_CONFIG.provident.maxFamily : SHANGHAI_CONFIG.provident.maxSingle;
 
     const calcStrategy = (name: string, downRaw: number): PaymentStrategy => {
@@ -154,13 +158,23 @@ export default function CalculatorPage() {
       const loanAmount = Math.max(0, debouncedProfile.targetPrice - downPayment);
       const providentLoan = Math.min(loanAmount, providentCap);
       const commercialLoan = Math.max(0, loanAmount - providentLoan);
-      const monthlyPayment =
-        calcEqualInstallmentMonthlyPayment(providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
-        calcEqualInstallmentMonthlyPayment(commercialLoan * 10000, commercialRate, debouncedProfile.loanYears);
-      const totalInterest =
-        ((calcEqualInstallmentMonthlyPayment(providentLoan * 10000, providentRate, debouncedProfile.loanYears) * months - providentLoan * 10000) +
-          (calcEqualInstallmentMonthlyPayment(commercialLoan * 10000, commercialRate, debouncedProfile.loanYears) * months - commercialLoan * 10000)) /
-        10000;
+      let monthlyPayment: number;
+      let totalInterest: number;
+
+      if (repaymentMethod === "equal-principal") {
+        monthlyPayment =
+          calcEqualPrincipalFirstMonthPayment(providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
+          calcEqualPrincipalFirstMonthPayment(commercialLoan * 10000, commercialRate, debouncedProfile.loanYears);
+
+        const providentInterest = (providentLoan * 10000 * (providentRate / 12) * (months + 1)) / 2;
+        const commercialInterest = (commercialLoan * 10000 * (commercialRate / 12) * (months + 1)) / 2;
+        totalInterest = (providentInterest + commercialInterest) / 10000;
+      } else {
+        const providentMonthly = calcEqualInstallmentMonthlyPayment(providentLoan * 10000, providentRate, debouncedProfile.loanYears);
+        const commercialMonthly = calcEqualInstallmentMonthlyPayment(commercialLoan * 10000, commercialRate, debouncedProfile.loanYears);
+        monthlyPayment = providentMonthly + commercialMonthly;
+        totalInterest = ((providentMonthly * months - providentLoan * 10000) + (commercialMonthly * months - commercialLoan * 10000)) / 10000;
+      }
       const remainingSavings = Math.max(0, availableCash - downPayment - taxes.total);
       const investmentIncome = calcMonthlyInvestmentIncome(remainingSavings, debouncedProfile.investmentReturn);
       const netMonthlyCost = monthlyPayment - investmentIncome;
@@ -220,14 +234,33 @@ export default function CalculatorPage() {
     const disposableRatio = Math.max(0, 100 - paymentRatio - expenseRatio);
 
     const shiftedMonthly =
-      calcEqualInstallmentMonthlyPayment(recommended.providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
-      calcEqualInstallmentMonthlyPayment(recommended.commercialLoan * 10000, commercialRate + rateShift / 100, debouncedProfile.loanYears);
+      repaymentMethod === "equal-principal"
+        ? calcEqualPrincipalFirstMonthPayment(recommended.providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
+          calcEqualPrincipalFirstMonthPayment(recommended.commercialLoan * 10000, commercialRate + rateShift / 100, debouncedProfile.loanYears)
+        : calcEqualInstallmentMonthlyPayment(recommended.providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
+          calcEqualInstallmentMonthlyPayment(recommended.commercialLoan * 10000, commercialRate + rateShift / 100, debouncedProfile.loanYears);
 
     const prepaySaveEstimate = Math.max(0, (prepayAmount * 10000 * commercialRate * Math.max(1, debouncedProfile.loanYears - 5)) / 2);
     const droppedDisposable = totalIncome * (1 - incomeDrop / 100) + recommended.investmentIncome - recommended.monthlyPayment - lifeExpense;
     const principalFirst =
       calcEqualPrincipalFirstMonthPayment(recommended.providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
       calcEqualPrincipalFirstMonthPayment(recommended.commercialLoan * 10000, commercialRate, debouncedProfile.loanYears);
+    const installmentMonthly =
+      calcEqualInstallmentMonthlyPayment(recommended.providentLoan * 10000, providentRate, debouncedProfile.loanYears) +
+      calcEqualInstallmentMonthlyPayment(recommended.commercialLoan * 10000, commercialRate, debouncedProfile.loanYears);
+
+    const yearlyAssets = calcYearlyAssets({
+      housePrice: debouncedProfile.targetPrice,
+      loanAmount: recommended.loanAmount,
+      monthlyPayment: recommended.monthlyPayment,
+      remainingSavings: recommended.remainingSavings,
+      investmentReturn: debouncedProfile.investmentReturn,
+      houseAppreciation: debouncedProfile.houseAppreciation ?? 2,
+      monthlySurplus: disposable,
+      loanYears: debouncedProfile.loanYears,
+      repaymentMethod,
+      annualLoanRate: commercialRate,
+    });
 
     return {
       downPaymentRate,
@@ -260,6 +293,9 @@ export default function CalculatorPage() {
       prepaySaveEstimate,
       droppedDisposable,
       principalFirst,
+      installmentMonthly,
+      repaymentMethod,
+      yearlyAssets,
     };
   }, [debouncedProfile, rateShift, prepayAmount, incomeDrop]);
 
@@ -396,6 +432,35 @@ export default function CalculatorPage() {
             <label className="text-sm font-medium text-slate-700">目标总价（万元）<input type="number" value={profile.targetPrice} onChange={(e) => setNumber("targetPrice", e.target.value)} className="mt-1 w-full rounded-lg border-2 border-[var(--brand-accent)] px-4 py-3 text-2xl font-bold text-slate-900" /></label>
             <label className="text-xs text-slate-600">目标面积（㎡）<input type="number" value={profile.targetArea} onChange={(e) => setNumber("targetArea", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
             <label className="text-xs text-slate-600">贷款年限<input type="number" value={profile.loanYears} onChange={(e) => setNumber("loanYears", e.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
+            <div className="text-xs text-slate-600">
+              <p className="mb-1.5">还款方式</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProfile((prev) => ({ ...prev, repaymentMethod: "equal-installment" }))}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+                    (profile.repaymentMethod ?? "equal-installment") === "equal-installment"
+                      ? "border-[var(--brand-accent)] bg-orange-50 font-medium text-[var(--brand-accent)]"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  等额本息
+                  <span className="mt-0.5 block text-[10px] text-slate-400">月供固定</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfile((prev) => ({ ...prev, repaymentMethod: "equal-principal" }))}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+                    (profile.repaymentMethod ?? "equal-installment") === "equal-principal"
+                      ? "border-[var(--brand-accent)] bg-orange-50 font-medium text-[var(--brand-accent)]"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  等额本金
+                  <span className="mt-0.5 block text-[10px] text-slate-400">总利息少</span>
+                </button>
+              </div>
+            </div>
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={profile.isFirstHome} onChange={(e) => setProfile((prev) => ({ ...prev, isFirstHome: e.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]" />首套房</label>
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={profile.isFullFiveUnique} onChange={(e) => setProfile((prev) => ({ ...prev, isFullFiveUnique: e.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]" />满五唯一（免个税）</label>
             <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={profile.isOverTwoYears} onChange={(e) => setProfile((prev) => ({ ...prev, isOverTwoYears: e.target.checked }))} className="h-4 w-4 accent-[var(--brand-primary)]" />满两年（免增值税）</label>
@@ -410,6 +475,26 @@ export default function CalculatorPage() {
               <p className="mt-1 font-semibold text-slate-900">{formatWan(calc.minDownPayment)}</p>
             </div>
           </div>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs text-slate-500">📊 高级设置</summary>
+            <div className="mt-2 grid gap-2">
+              <label className="text-xs text-slate-600">
+                预期房价年涨幅（%）
+                <div className="mt-1 flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={-5}
+                    max={10}
+                    step={0.5}
+                    value={profile.houseAppreciation ?? 2}
+                    onChange={(e) => setNumber("houseAppreciation", e.target.value)}
+                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                  />
+                  <span className="text-sm">%</span>
+                </div>
+              </label>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -438,7 +523,11 @@ export default function CalculatorPage() {
                 <h3 className="mt-2 text-sm font-semibold">{s.name}</h3>
                 <p className="mt-1 text-xs text-slate-500">首付 {formatWan(s.downPayment)} · 贷款 {formatWan(s.loanAmount)}</p>
                 <p className="mt-1 text-xs text-slate-500">公积金 {formatWan(s.providentLoan)} · 商贷 {formatWan(s.commercialLoan)}</p>
-                <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-700">月供 {formatMoney(s.monthlyPayment)} · 月投资收益 +{formatMoney(s.investmentIncome)}</p>
+                <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                  月供 {formatMoney(s.monthlyPayment)}
+                  {calc.repaymentMethod === "equal-principal" ? <span className="text-slate-400">（首月，逐月递减）</span> : null}
+                  {" · "}月投资收益 +{formatMoney(s.investmentIncome)}
+                </p>
                 <p className={`mt-1 text-xs ${s.netMonthlyCost <= 0 ? "text-emerald-700" : "text-slate-500"}`}>净月支出 {s.netMonthlyCost <= 0 ? `净赚 ${formatMoney(Math.abs(s.netMonthlyCost))}` : formatMoney(s.netMonthlyCost)}</p>
                 <p className="mt-1 text-xs text-slate-500">30年总利息 {formatWan(s.totalInterest)}</p>
               </article>
@@ -462,6 +551,55 @@ export default function CalculatorPage() {
         </div>
         <p className="mt-3 text-xs text-slate-500">
           收入下降阈值约 {calc.incomeDropThreshold.toFixed(1)}%，超过后每月缓冲将明显收缩。
+        </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-slate-900">📊 逐年家庭资产变化</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          假设房价年涨 {profile.houseAppreciation ?? 2}%，投资年化 {profile.investmentReturn}% ，可支配收入 50% 用于储蓄
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[700px] w-full border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 text-left text-slate-500">
+                <th className="px-3 py-2 font-medium">年份</th>
+                <th className="px-3 py-2 font-medium">房产价值</th>
+                <th className="px-3 py-2 font-medium">剩余贷款</th>
+                <th className="px-3 py-2 font-medium">房产净值</th>
+                <th className="px-3 py-2 font-medium">投资资产</th>
+                <th className="px-3 py-2 font-medium text-[var(--brand-primary)]">总净值</th>
+                <th className="px-3 py-2 font-medium">累计已还</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-slate-100 bg-slate-50/50">
+                <td className="px-3 py-2">购房时</td>
+                <td className="px-3 py-2">{formatWan(profile.targetPrice)}</td>
+                <td className="px-3 py-2">{formatWan(calc.recommended.loanAmount)}</td>
+                <td className="px-3 py-2">{formatWan(profile.targetPrice - calc.recommended.loanAmount)}</td>
+                <td className="px-3 py-2">{formatWan(calc.recommended.remainingSavings)}</td>
+                <td className="px-3 py-2 font-medium text-[var(--brand-primary)]">
+                  {formatWan(profile.targetPrice - calc.recommended.loanAmount + calc.recommended.remainingSavings)}
+                </td>
+                <td className="px-3 py-2">0 万</td>
+              </tr>
+              {calc.yearlyAssets.map((row) => (
+                <tr key={row.year} className="border-t border-slate-100">
+                  <td className="px-3 py-2">第{row.year}年</td>
+                  <td className="px-3 py-2">{formatWan(row.houseValue)}</td>
+                  <td className="px-3 py-2">{formatWan(row.remainingLoan)}</td>
+                  <td className="px-3 py-2">{formatWan(row.houseEquity)}</td>
+                  <td className="px-3 py-2">{formatWan(row.investmentAssets)}</td>
+                  <td className="px-3 py-2 font-medium text-[var(--brand-primary)]">{formatWan(row.totalNetWorth)}</td>
+                  <td className="px-3 py-2 text-slate-400">{formatWan(row.cumulativePayment)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[10px] text-slate-400">
+          * 房产价值基于预设年涨幅估算，实际可能有较大偏差。投资资产假设可支配收入的 50% 用于储蓄，仅供参考。
         </p>
       </section>
 
@@ -523,7 +661,22 @@ export default function CalculatorPage() {
               ) : null}
             </div>
           </div>
-          <div className="rounded-lg bg-slate-50 p-3 text-sm"><p>等额本息 vs 等额本金</p><p className="mt-1 text-xs text-slate-600">本息月供：{formatMoney(calc.recommended.monthlyPayment)}</p><p className="mt-1 text-xs text-slate-600">本金首月：{formatMoney(calc.principalFirst)}</p></div>
+          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <p>
+              当前方式 vs 另一种
+            </p>
+            {calc.repaymentMethod === "equal-principal" ? (
+              <>
+                <p className="mt-1 text-xs text-slate-600">当前（等额本金首月）：{formatMoney(calc.recommended.monthlyPayment)}</p>
+                <p className="mt-1 text-xs text-slate-600">对比（等额本息月供）：{formatMoney(calc.installmentMonthly)}</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-xs text-slate-600">当前（等额本息月供）：{formatMoney(calc.recommended.monthlyPayment)}</p>
+                <p className="mt-1 text-xs text-slate-600">对比（等额本金首月）：{formatMoney(calc.principalFirst)}</p>
+              </>
+            )}
+          </div>
         </div>
       </section>
 
