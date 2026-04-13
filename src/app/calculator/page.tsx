@@ -715,6 +715,53 @@ export default function CalculatorPage() {
         </div>
       </details>
 
+      <section>
+        <h3 className="mb-3 text-sm font-semibold text-slate-700">财务知识参考</h3>
+        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+          {[
+            {
+              emoji: "📏",
+              title: "28/36 法则",
+              body: "月供不超过税前月收入的 28%，所有债务（含房贷）不超过 36%。超过即进入高压区，建议降低目标总价或增加首付。",
+            },
+            {
+              emoji: "💸",
+              title: "买房总成本",
+              body: "实际支出 = 房价 + 契税 + 增值税/个税 + 中介费 + 装修费 + 家具家电。上海二手房综合税费约为总价的 3–6%，不可忽视。",
+            },
+            {
+              emoji: "🛟",
+              title: "保留应急金",
+              body: "买房后至少保留 6 个月家庭月支出作为应急储备，避免突发失业或大额支出时陷入断供风险。",
+            },
+            {
+              emoji: "🏦",
+              title: "优先用公积金",
+              body: "上海公积金首套利率 3.1%，远低于商贷约 3.2%+。家庭贷款上限 120 万，个人 60 万。申请前确认连续缴存满 6 个月。",
+            },
+            {
+              emoji: "📉",
+              title: "利率变动影响",
+              body: "贷款 300 万 × 30 年，利率每升 0.5%，月供增约 ¥850，总利息多约 30 万。固定利率时代已过，需预留缓冲空间。",
+            },
+            {
+              emoji: "🔄",
+              title: "等额本金 vs 本息",
+              body: "等额本金前期月供更高（首月最贵），但总利息更少。适合收入高、希望快速降低负债的买家；收入一般则选等额本息更稳。",
+            },
+          ].map((card) => (
+            <div
+              key={card.title}
+              className="min-w-[220px] max-w-[260px] flex-shrink-0 snap-center rounded-xl border border-slate-200 bg-white p-4"
+            >
+              <p className="text-lg">{card.emoji}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-800">{card.title}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{card.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <p className="rounded-lg bg-blue-50 p-4 text-sm leading-6 text-blue-700">完成评估后建议进入房源筛选：<Link href="/compare" className="ml-1 font-semibold underline underline-offset-2">去房源对比器</Link></p>
       <p className="text-xs leading-6 text-slate-500">以上计算仅供参考，不构成投资建议。实际以银行审批和最新政策为准。数据更新日期：{SHANGHAI_CONFIG.lastUpdated}</p>
     </div>
